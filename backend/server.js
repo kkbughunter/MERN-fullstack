@@ -45,7 +45,10 @@ app.post("/products", upload.single("image"), async (req, res) => {
   const product = await Product.create({
     name: req.body.name,
     price: req.body.price,
-    image: req.file ? `${process.env.BASE_URL}/${req.file.path}` : null
+    image: req.file
+  ? `${process.env.BASE_URL}:${process.env.PORT}/${req.file.path}`
+  : null
+
   });
   res.json(product);
 });
