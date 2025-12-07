@@ -6,27 +6,38 @@ const dotenv = require("dotenv");
 const path = require("path");
 const fs = require("fs");
 
-dotenv.config();
+// Use correct env automatically
+dotenv.config({
+  path: process.env.NODE_ENV === "production" ? ".env.production" : ".env"
+});
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use(`/${process.env.UPLOAD_DIR}`, express.static(process.env.UPLOAD_DIR));
 
+// Absolute upload folder path
+const uploadPath = path.join(__dirname, process.env.UPLOAD_DIR);
+
+// Make uploads folder public
+app.use(`/${process.env.UPLOAD_DIR}`, express.static(uploadPath));
+
+// Mongo
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.error(err));
+.then(() => console.log("MongoDB Connected"))
+.catch(err => console.error(err));
 
-// Ensure upload directory exists
-if (!fs.existsSync(process.env.UPLOAD_DIR)) {
-  fs.mkdirSync(process.env.UPLOAD_DIR);
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath, { recursive: true });
 }
 
-// Multer config
+// Multer Setup
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, process.env.UPLOAD_DIR),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + "-" + file.originalname)
+  destination: (req, file, cb) => cb(null, uploadPath),
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname.replace(/\s+/g, "_"));
+  }
 });
 
 const upload = multer({ storage });
@@ -42,14 +53,16 @@ const Product = mongoose.model("Product", productSchema);
 
 // CREATE
 app.post("/products", upload.single("image"), async (req, res) => {
+  const imageUrl = req.file
+    ? `${process.env.BASE_URL}/${process.env.UPLOAD_DIR}/${req.file.filename}`
+    : null;
+
   const product = await Product.create({
     name: req.body.name,
     price: req.body.price,
-    image: req.file
-  ? `${process.env.BASE_URL}:${process.env.PORT}/${req.file.path}`
-  : null
-
+    image: imageUrl
   });
+
   res.json(product);
 });
 
@@ -63,11 +76,13 @@ app.get("/products", async (req, res) => {
 app.put("/products/:id", upload.single("image"), async (req, res) => {
   const update = {
     name: req.body.name,
-    price: req.body.price,
+    price: req.body.price
   };
+
   if (req.file) {
-    update.image = `${process.env.BASE_URL}/${req.file.path}`;
+    update.image = `${process.env.BASE_URL}/${process.env.UPLOAD_DIR}/${req.file.filename}`;
   }
+
   const product = await Product.findByIdAndUpdate(req.params.id, update, { new: true });
   res.json(product);
 });
